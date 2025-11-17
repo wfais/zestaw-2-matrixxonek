@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import sys
+import math
 
 # Stałe konfiguracyjne
 LICZBA_KROKOW = 80_000_000
@@ -19,8 +20,12 @@ def policz_fragment_pi(pocz: int, kon: int, krok: float, wyniki: list[float], in
     # Każdy wątek powinien:
     #   - obliczyć lokalną sumę dla przydzielonego przedziału,
     #   - wpisać wynik do wyniki[indeks].
+    wynik_lokalny = 0.0
+    for i in range(pocz, kon):
+        x_i = (i + 0.5) * krok
+        wynik_lokalny += 4.0/(1 + (x_i * x_i))
 
-    pass  # zaimplementuj obliczanie fragmentu całki dla danego wątku
+    wyniki[indeks] = wynik_lokalny
 
 
 def main():
@@ -30,10 +35,9 @@ def main():
 
     # Wstępne uruchomienie w celu stabilizacji środowiska wykonawczego
     krok = 1.0 / LICZBA_KROKOW
-    wyniki = [0.0]
-    w = threading.Thread(target=policz_fragment_pi, args=(0, LICZBA_KROKOW, krok, wyniki, 0))
-    w.start()
-    w.join()
+
+    czas_bazowy = 0.0
+    max_watkow = max(LICZBA_WATKOW)
 
     # ---------------------------------------------------------------
     # Tu zaimplementować:
@@ -43,7 +47,52 @@ def main():
     #   - obliczenie przybliżenia π jako sumy wyników z poszczególnych wątków,
     #   - pomiar czasu i wypisanie przyspieszenia.
     # ---------------------------------------------------------------
+    
+    for N_watkow in LICZBA_WATKOW:
+        watki = []
+        wyniki_czesciowe = [0.0] * N_watkow 
+        
+        # Obliczanie bloku pracy 
+        rozmiar_bloku = LICZBA_KROKOW // N_watkow
+        
+        start_time = time.perf_counter()
+        
+        # Utworzenie i uruchomienie wątków (podział pracy)
+        for i in range(N_watkow):
+            pocz = i * rozmiar_bloku
+            kon = pocz + rozmiar_bloku 
+            
+            # Ostatni wątek musi obsłużyć resztę
+            if i == N_watkow - 1:
+                kon = LICZBA_KROKOW
+            
+            w = threading.Thread(
+                target=policz_fragment_pi, 
+                args=(pocz, kon, krok, wyniki_czesciowe, i)
+            )
+            watki.append(w)
+            w.start()
+            
+        # Poczekanie na zakończenie wszystkich wątków
+        for w in watki:
+            w.join()
+            
+        end_time = time.perf_counter()
+        czas = end_time - start_time
+        
+        wynik_pi = sum(wyniki_czesciowe)
+        
+        # Ustalenie czasu bazowego (dla N=1)
+        if N_watkow == 1:
+            czas_bazowy = czas
+            
+        przyspieszenie = czas_bazowy / czas if czas > 0 else 0.0
 
+        # Wypisanie wyniku
+        print(f"{N_watkow:<6}{czas:<12.4f}{przyspieszenie:<20.2f}{wynik_pi:.10f}")
+
+    print(f"\nPi (z biblioteki math): {math.pi:.10f}")
+    print(f"Błąd przybliżenia: {abs(wynik_pi - math.pi):.2e}")
 
 if __name__ == "__main__":
     main()
